@@ -12,6 +12,7 @@
 #include <linux/uaccess.h>
 #include <linux/string.h>
 #include <errno.h>
+
 #include "message_slot.h"
 
 
@@ -25,12 +26,32 @@ MODULE_AUTHOR("Snir Fridman");
 struct node {
     struct node *next;
     int chid;
-    char *buffer;
-}
+};
 
-void search_node(struct file *desc, int s_chid) {
+static struct node lists[256];
+
+void search_node(struct file *fdesc, int s_chid) {
     // Searches for the correct node and adjusts fdesc accordingly
-    
+    struct inode *finode = fget(fdesc)->f_inode;
+    int minor = iminor(finode);
+    struct node *head = lists[minor];
+
+    if (head != NULL) {
+        if (head->chid == s_chid) {
+	   return;
+        }
+    }
+    while (head->next != NULL) {
+        head = head->next;
+        fdesc->f_pos = fdesc->f_pos + BUF_LEN;
+        if (head->chid == s_chid) {
+	    return;
+        }
+    }
+    // If we reached here, it means that s_chid could not be found.
+    head->next = kmalloc(sizeof(struct node));
+    *(head->next) = {NULL, s_chid};
+    fdesc-> f_pos = f_desc->f_pos + BUF_LEN;
 }
 
 struct chardev_info {
@@ -95,7 +116,7 @@ static ssize_t device_write(struct file *fp, const char __user *msg,
     return i;
 }
 
-static ssize_t device_ioctl(struct file *fp, unsigned int ctrl, 
+static int device_ioctl(struct file *fp, unsigned int ctrl, 
                             unsigned long cmd) {
     if (cmd != MSG_SLOT_COMMAND) {
         errno = EINVAL;
@@ -108,8 +129,9 @@ static ssize_t device_ioctl(struct file *fp, unsigned int ctrl,
         return -1;
     }
     else {
-        // TODOFORREALFORREAL
+        search_node(fp, ctrl);
     }
+    return 0;
 }
 
 // -----------------------------------------------------------------------------
