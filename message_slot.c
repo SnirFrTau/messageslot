@@ -11,7 +11,9 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/string.h>
-#include <errno.h>
+#include <linux/errno.h>
+#include <linux/slab.h>
+#include <linux/ioctl.h>
 
 #include "message_slot.h"
 
@@ -28,11 +30,11 @@ struct node {
     int chid;
 };
 
-static struct node lists[256];
+static struct node *lists[256];
 
 void search_node(struct file *fdesc, int s_chid) {
     // Searches for the correct node and adjusts fdesc accordingly
-    struct inode *finode = fget(fdesc)->f_inode;
+    struct inode *finode = fdesc->f_inode;
     int minor = iminor(finode);
     struct node *head = lists[minor];
 
@@ -49,9 +51,9 @@ void search_node(struct file *fdesc, int s_chid) {
         }
     }
     // If we reached here, it means that s_chid could not be found.
-    head->next = kmalloc(sizeof(struct node));
-    *(head->next) = {NULL, s_chid};
-    fdesc-> f_pos = f_desc->f_pos + BUF_LEN;
+    head->next = kmalloc(sizeof(struct node), GFP_USER);
+    *(head->next) = (struct node) {NULL, s_chid};
+    fdesc-> f_pos = fdesc->f_pos + BUF_LEN;
 }
 
 struct chardev_info {
@@ -63,7 +65,6 @@ static struct chardev_info device_info;
 static int major;
 static char slot_buff[BUF_LEN];
 static int dev_open_flag = 0; // Marks if the device is open
-static unsigned int channel_bmap[1024 * 1024];
 
 // -----------------------------------------------------------------------------
 
@@ -102,13 +103,13 @@ static ssize_t device_read(struct file *fp, char __user *msg,
 
 static ssize_t device_write(struct file *fp, const char __user *msg, 
                             size_t length, loff_t *offset) {
+    ssize_t i;
+  
     // Check message 0 < length <= BUF_LEN
     if (length <= 0 || length > 128) {
-        errno = EMSGSIZE;
-        return -1;
+        return -EMSGSIZE;
     }
 
-    ssize_t i;
     for (i = 0; i < length && i < BUF_LEN; i++) {
         get_user(slot_buff[i], &msg[i]);
     }
@@ -116,17 +117,15 @@ static ssize_t device_write(struct file *fp, const char __user *msg,
     return i;
 }
 
-static int device_ioctl(struct file *fp, unsigned int ctrl, 
+static long int device_ioctl(struct file *fp, unsigned int ctrl, 
                             unsigned long cmd) {
     if (cmd != MSG_SLOT_COMMAND) {
-        errno = EINVAL;
-        return -1;
+        return -EINVAL;
     }
     
     // cmd is valid
     if (ctrl == 0) {
-        errno = EINVAL;
-        return -1;
+        return -EINVAL;
     }
     else {
         search_node(fp, ctrl);

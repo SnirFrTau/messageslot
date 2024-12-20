@@ -11,6 +11,6 @@
 #define DEVICE_FILE_NAME "message_slot"
 
 // Generate command number to be unsigned long, since this is what ioctl receives
-#define MSG_SLOT_COMMAND _IORW(MAJOR_NUM, 0, unsigned long)
+#define MSG_SLOT_COMMAND _IOWR(MAJOR_NUM, 0, unsigned long)
 
 #endif
