@@ -38,24 +38,33 @@ void search_node(struct file *fdesc, int s_chid) {
     struct inode *finode = fdesc->f_inode;
     int minor = iminor(finode);
     struct node *head = lists[minor];
-
+    printk(KERN_DEBUG"1\n");
     if (head) {
         if (head->chid == s_chid) {
 	   return;
         }
+	while (head->next) {
+            head = head->next;
+            fdesc->f_pos = fdesc->f_pos + BUF_LEN;
+            if (head->chid == s_chid) {
+	        return;
+            }
+	}
+
+	// If we reached here, it means that s_chid could not be found.
+        // Therefore, create a new node.
+        head->next = kmalloc(sizeof(struct node), GFP_USER);
+        *(head->next) = (struct node) {NULL, s_chid};
+        fdesc-> f_pos = fdesc->f_pos + BUF_LEN;
     }
-    while (head->next) {
-        head = head->next;
-        fdesc->f_pos = fdesc->f_pos + BUF_LEN;
-        if (head->chid == s_chid) {
-	    return;
-        }
+    else {
+      printk(KERN_DEBUG"2\n");
+        head = kmalloc(sizeof(struct node), GFP_USER);
+	printk(KERN_DEBUG"3\n");
+	*head = (struct node) {NULL, s_chid};
+	printk(KERN_DEBUG"4\n");
+	lists[minor] = head;
     }
-    // If we reached here, it means that s_chid could not be found.
-    // Therefore, create a new node.
-    head->next = kmalloc(sizeof(struct node), GFP_USER);
-    *(head->next) = (struct node) {NULL, s_chid};
-    fdesc-> f_pos = fdesc->f_pos + BUF_LEN;
 }
 
 char *buffer_ptr(struct file *fdesc, loff_t off) {
@@ -149,6 +158,7 @@ static ssize_t device_write(struct file *filp, const char __user *msg,
 
 static long int device_ioctl(struct file *fp, unsigned int ctrl, 
                             unsigned long cmd) {
+  printk("0\n");
     if (cmd != MSG_SLOT_COMMAND) {
         return -EINVAL;
     }
@@ -165,7 +175,7 @@ static long int device_ioctl(struct file *fp, unsigned int ctrl,
 
 // -----------------------------------------------------------------------------
 
-struct file_operations fops = {
+static struct file_operations fops = {
     .owner = THIS_MODULE,
     .open = device_open,
     .read = device_read,
@@ -190,7 +200,8 @@ static int __init mod_init(void) {
     memset(&device_info, 0, sizeof(struct chardev_info));
     spin_lock_init(&device_info.lock);
 
-    printk("%s registration succeeded.\n", DEVICE_FILE_NAME);
+    printk("%s registration succeeded, major number %d.\n", DEVICE_FILE_NAME, MAJOR_NUM);
+    printk("Please call ioctl, it has %d\n", fops.unlocked_ioctl == device_ioctl);
     return 0;
 }
 

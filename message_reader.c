@@ -11,8 +11,9 @@
 
 // -----------------------------------------------------------------------------
 
-void check_feedback(int fb) {
-    if (fb != 0) {
+void check_feedback(int fb, int wanted) {
+    if (fb != wanted) {
+        printf("%d\n", errno);
         fprintf(stderr, "message_reader: %s\n", strerror(errno));
         exit(1);
     }
@@ -23,6 +24,7 @@ void check_feedback(int fb) {
 int main(int argc, char **argv) {
     if (argc != 3) {
         errno = EINVAL;
+	printf("%d", errno);
         fprintf(stderr, "message_reader: %s\n", strerror(errno));
         exit(1);
     }
@@ -37,16 +39,17 @@ int main(int argc, char **argv) {
     chid = (unsigned int)strtoul(argv[2], &end, 10); // Assuming a valid value
 
     if ((fdesc = open(fpath, O_RDWR)) < 0) {
-        check_feedback(1);
+        check_feedback(1, 0);
     }
     
     feedback = ioctl(fdesc, chid, MSG_SLOT_COMMAND);
-    check_feedback(feedback);
+    check_feedback(feedback, SUCCESS);
     feedback = read(fdesc, msg, BUF_LEN);
-    check_feedback(feedback);
+    check_feedback(feedback, BUF_LEN);
     
     close(fdesc);
     write(STDOUT_FILENO, msg, BUF_LEN);
+    printf("\n");
     
     return 0;
 }
