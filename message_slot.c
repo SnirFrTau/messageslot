@@ -30,7 +30,7 @@ struct node {
     int chid;
 };
 
-static struct node *lists[256];
+static struct node *lists[MINOR_COUNT];
 
 void search_node(struct file *fdesc, int s_chid) {
     // Searches for the correct node and adjusts fdesc accordingly
@@ -38,12 +38,12 @@ void search_node(struct file *fdesc, int s_chid) {
     int minor = iminor(finode);
     struct node *head = lists[minor];
 
-    if (head != NULL) {
+    if (head) {
         if (head->chid == s_chid) {
 	   return;
         }
     }
-    while (head->next != NULL) {
+    while (head->next) {
         head = head->next;
         fdesc->f_pos = fdesc->f_pos + BUF_LEN;
         if (head->chid == s_chid) {
@@ -56,13 +56,21 @@ void search_node(struct file *fdesc, int s_chid) {
     fdesc-> f_pos = fdesc->f_pos + BUF_LEN;
 }
 
+void free_list(struct node *head) {
+    if (head) {
+        free_list(head->next);
+	kfree(head);
+    }
+}
+
+// -----------------------------------------------------------------------------
+  
 struct chardev_info {
     // The reason for this struct is to make sure the lock isn't moved
     spinlock_t lock;
 }; 
 
 static struct chardev_info device_info;
-static int major;
 static char slot_buff[BUF_LEN];
 static int dev_open_flag = 0; // Marks if the device is open
 
@@ -150,24 +158,28 @@ struct file_operations fops = {
 
 // Loader
 static int __init mod_init(void) {
-    if ((major = register_chrdev(MAJOR_NUM, "message_slot", &fops)) < 0) {
-        printk(KERN_ALERT"%s registration failed for %d", DEVICE_FILE_NAME, major);
-        return major;
+    int res;
+    if ((res = register_chrdev(MAJOR_NUM, "message_slot", &fops)) < 0) {
+        printk(KERN_ALERT"%s registration failed with status %d", DEVICE_FILE_NAME, -res);
+        return res;
     }
     // Getting here means the character device registered successfully.
 
     memset(&device_info, 0, sizeof(struct chardev_info));
     spin_lock_init(&device_info.lock);
 
-    printk("Testing of major %d\n", major);
+    printk("%s registration succeeded.\n", DEVICE_FILE_NAME);
     return 0;
 }
 
 // Cleanup
 static void __exit mod_cleanup(void) {
-    // TODO: free all used-up memory!
+    int i;
+    for (i = 0; i < MINOR_COUNT; i++) {
+        free_list(lists[i]);
+    }
 
-    printk("Cleanup of major %d\n", major);
+    printk("Cleanup of %s\n", DEVICE_FILE_NAME);
 }
 
 module_init(mod_init);

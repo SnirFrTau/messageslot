@@ -5,6 +5,7 @@
 #include <linux/ioctl.h>
 
 #define MAJOR_NUM 235
+#define MINOR_COUNT 256
 #define SUCCESS 0
 #define DEVICE_RANGE_NAME "message_slot"
 #define BUF_LEN 128
