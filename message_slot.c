@@ -181,7 +181,7 @@ struct file_operations fops = {
 // Loader
 static int __init mod_init(void) {
     int res;
-    if ((res = register_chrdev(MAJOR_NUM, "message_slot", &fops)) < 0) {
+    if ((res = register_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME, &fops)) < 0) {
         printk(KERN_ALERT"%s registration failed with status %d", DEVICE_FILE_NAME, -res);
         return res;
     }
@@ -200,6 +200,8 @@ static void __exit mod_cleanup(void) {
     for (i = 0; i < MINOR_COUNT; i++) {
         free_list(lists[i]);
     }
+
+    unregister_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME);
 
     printk("Cleanup of %s\n", DEVICE_FILE_NAME);
 }
