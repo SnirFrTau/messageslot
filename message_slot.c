@@ -28,6 +28,7 @@ MODULE_AUTHOR("Snir Fridman");
 struct node {
     struct node *next;
     int chid;
+    char slot_buff[BUF_LEN];
 };
 
 static struct node *lists[MINOR_COUNT];
@@ -51,9 +52,27 @@ void search_node(struct file *fdesc, int s_chid) {
         }
     }
     // If we reached here, it means that s_chid could not be found.
+    // Therefore, create a new node.
     head->next = kmalloc(sizeof(struct node), GFP_USER);
     *(head->next) = (struct node) {NULL, s_chid};
     fdesc-> f_pos = fdesc->f_pos + BUF_LEN;
+}
+
+char *buffer_ptr(struct file *fdesc, loff_t off) {
+    // Returns a pointer to the buffer associated with an offset.
+    unsigned int ind;
+    struct inode *finode = fdesc->f_inode;
+    int minor = iminor(finode);
+    struct node *head = lists[minor];
+    
+    for (ind = off / 128; ind > 0; ind--) {
+        if (!head)
+	    return NULL;
+	head = head->next;
+    }
+    if(!head)
+        return NULL;
+    return head->slot_buff;
 }
 
 void free_list(struct node *head) {
@@ -71,7 +90,7 @@ struct chardev_info {
 }; 
 
 static struct chardev_info device_info;
-static char slot_buff[BUF_LEN];
+
 static int dev_open_flag = 0; // Marks if the device is open
 
 // -----------------------------------------------------------------------------
@@ -99,18 +118,21 @@ static int device_release(struct inode *inode, struct file *file) {
     return SUCCESS;
 }
 
-static ssize_t device_read(struct file *fp, char __user *msg, 
+static ssize_t device_read(struct file *filp, char __user *msg, 
                            size_t length, loff_t *offset) {
+    char *buf_ptr = buffer_ptr(filp, *offset);
     ssize_t i;
+    
     for (i = 0; i < length && i < BUF_LEN; i++) {
-        put_user(slot_buff[i], &msg[i]);
+        put_user(buf_ptr[i], &msg[i]);
     }
 
     return i;
 }
 
-static ssize_t device_write(struct file *fp, const char __user *msg, 
+static ssize_t device_write(struct file *filp, const char __user *msg, 
                             size_t length, loff_t *offset) {
+    char *buf_ptr = buffer_ptr(filp, *offset);
     ssize_t i;
   
     // Check message 0 < length <= BUF_LEN
@@ -119,7 +141,7 @@ static ssize_t device_write(struct file *fp, const char __user *msg,
     }
 
     for (i = 0; i < length && i < BUF_LEN; i++) {
-        get_user(slot_buff[i], &msg[i]);
+        get_user(buf_ptr[i], &msg[i]);
     }
 
     return i;
