@@ -38,7 +38,6 @@ void search_node(struct file *fdesc, int s_chid) {
     struct inode *finode = fdesc->f_inode;
     int minor = iminor(finode);
     struct node *head = lists[minor];
-    printk(KERN_DEBUG"1\n");
     if (head) {
         if (head->chid == s_chid) {
 	   return;
@@ -52,17 +51,13 @@ void search_node(struct file *fdesc, int s_chid) {
 	}
 
 	// If we reached here, it means that s_chid could not be found.
-        // Therefore, create a new node.
         head->next = kmalloc(sizeof(struct node), GFP_USER);
         *(head->next) = (struct node) {NULL, s_chid};
         fdesc-> f_pos = fdesc->f_pos + BUF_LEN;
     }
     else {
-      printk(KERN_DEBUG"2\n");
         head = kmalloc(sizeof(struct node), GFP_USER);
-	printk(KERN_DEBUG"3\n");
 	*head = (struct node) {NULL, s_chid};
-	printk(KERN_DEBUG"4\n");
 	lists[minor] = head;
     }
 }
@@ -158,13 +153,13 @@ static ssize_t device_write(struct file *filp, const char __user *msg,
 
 static long int device_ioctl(struct file *fp, unsigned int ctrl, 
                             unsigned long cmd) {
-  printk("0\n");
     if (cmd != MSG_SLOT_COMMAND) {
         return -EINVAL;
     }
     
     // cmd is valid
-    if (ctrl == 0) {
+    // This is hardcoded to 3 to not conflict with the kernel
+    if (ctrl == 3) {
         return -EINVAL;
     }
     else {
@@ -199,9 +194,6 @@ static int __init mod_init(void) {
 
     memset(&device_info, 0, sizeof(struct chardev_info));
     spin_lock_init(&device_info.lock);
-
-    printk("%s registration succeeded, major number %d.\n", DEVICE_FILE_NAME, MAJOR_NUM);
-    printk("Please call ioctl, it has %d\n", fops.unlocked_ioctl == device_ioctl);
     return 0;
 }
 
@@ -213,8 +205,6 @@ static void __exit mod_cleanup(void) {
     }
 
     unregister_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME);
-
-    printk("Cleanup of %s\n", DEVICE_FILE_NAME);
 }
 
 module_init(mod_init);

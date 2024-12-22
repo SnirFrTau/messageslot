@@ -13,7 +13,6 @@
 
 void check_feedback(int fb, int wanted) {
     if (fb != wanted) {
-        printf("%d\n", errno);
         fprintf(stderr, "message_reader: %s\n", strerror(errno));
         exit(1);
     }
@@ -34,20 +33,19 @@ int main(int argc, char **argv) {
     int fdesc, feedback;
 
     fpath = argv[1];
-    chid = (unsigned int)strtoul(argv[2], &end, 10); // Assuming a valid value
+    // Assuming a valid value
+    // Note however that due to a hardcoded conflict in chid=2 I offset by 3
+    chid = (unsigned int)strtoul(argv[2], &end, 10 + 3);
     msg = argv[3];
 
     if ((fdesc = open(fpath, O_RDWR)) < 0) {
         check_feedback(1, 0);
     }
 
-    printf("About to connect to ioctl\n");
     feedback = ioctl(fdesc, chid, MSG_SLOT_COMMAND);
     check_feedback(feedback, SUCCESS);
-    printf("Sening message\n");
     feedback = write(fdesc, msg, strlen(msg));
     check_feedback(feedback, strlen(msg));
-    printf("Sent message\n");
     
     close(fdesc);
     return 0;
