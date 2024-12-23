@@ -159,7 +159,7 @@ static long int device_ioctl(struct file *fp, unsigned int ctrl,
     
     // cmd is valid
     // This is hardcoded to 3 to not conflict with the kernel
-    if (ctrl == 3) {
+    if (ctrl == 0) {
         return -EINVAL;
     }
     else {
