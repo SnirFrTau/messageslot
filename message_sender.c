@@ -13,7 +13,7 @@
 
 void check_feedback(int fb, int wanted) {
     if (fb != wanted) {
-        fprintf(stderr, "message_reader: %s\n", strerror(errno));
+        fprintf(stderr, "message_sender: %s\n", strerror(errno));
         exit(1);
     }
 }
@@ -35,14 +35,14 @@ int main(int argc, char **argv) {
     fpath = argv[1];
     // Assuming a valid value
     // Note however that due to a hardcoded conflict in chid=2 I offset by 3
-    chid = (unsigned int)strtoul(argv[2], &end, 10 + 3);
+    chid = (unsigned int)strtoul(argv[2], &end, 10);
     msg = argv[3];
 
     if ((fdesc = open(fpath, O_RDWR)) < 0) {
         check_feedback(1, 0);
     }
-
-    feedback = ioctl(fdesc, chid, MSG_SLOT_COMMAND);
+    
+    feedback = ioctl(fdesc, MSG_SLOT_COMMAND, chid);
     check_feedback(feedback, SUCCESS);
     feedback = write(fdesc, msg, strlen(msg));
     check_feedback(feedback, strlen(msg));

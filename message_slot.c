@@ -151,8 +151,8 @@ static ssize_t device_write(struct file *filp, const char __user *msg,
     return i;
 }
 
-static long int device_ioctl(struct file *fp, unsigned int ctrl, 
-                            unsigned long cmd) {
+static long int device_ioctl(struct file *fp, unsigned int cmd, 
+                            unsigned long ctrl) {
     if (cmd != MSG_SLOT_COMMAND) {
         return -EINVAL;
     }
