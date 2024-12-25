@@ -23,7 +23,6 @@ void check_feedback(int fb, int wanted) {
 int main(int argc, char **argv) {
     if (argc != 3) {
         errno = EINVAL;
-	printf("%d", errno);
         fprintf(stderr, "message_reader: %s\n", strerror(errno));
         exit(1);
     }
@@ -54,7 +53,6 @@ int main(int argc, char **argv) {
     }
     
     write(STDOUT_FILENO, msg, feedback);
-
     printf("\n");
     return 0;
 }
