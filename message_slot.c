@@ -36,20 +36,38 @@ static struct node *lists[MINOR_COUNT];
 
 struct node *search_node(struct file *fdesc, int s_chid) {
     // Searches for the correct node and adjusts fdesc accordingly
+    // Also, if passes a node with nd->len = 0, i.e. the node was created during
+    // an empty read, it deletes that node. Since writes only occur with positive
+    // nd->len values, this can only occur for empty reads.
+  
     struct inode *finode = fdesc->f_inode;
     int minor = iminor(finode);
     struct node *head = lists[minor];
+    struct node *for_del;
+
+    while (head && head->len == 0) {
+	for_del = head;
+	head = head->next;
+	kfree(for_del);
+    }
     if (head) {
         if (head->chid == s_chid) {
 	   return head;
         }
 	while (head->next) {
-            head = head->next;
-            fdesc->f_pos = fdesc->f_pos + BUF_LEN;
-            if (head->chid == s_chid) {
-	        return head;
-            }
-	}
+	    if (head->next->len == 0) {
+	        for_del = head->next;
+	        head->next = head->next->next;
+	        kfree(for_del);
+	    }
+	    else {
+	        head = head->next;
+                fdesc->f_pos = fdesc->f_pos + BUF_LEN;
+                if (head->chid == s_chid) {
+	            return head;
+                }
+	    }
+        }
 
 	// If we reached here, it means that s_chid could not be found.
         head->next = kmalloc(sizeof(struct node), GFP_USER);
