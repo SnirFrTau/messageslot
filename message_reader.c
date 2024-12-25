@@ -46,11 +46,15 @@ int main(int argc, char **argv) {
     feedback = ioctl(fdesc, MSG_SLOT_COMMAND, chid);
     check_feedback(feedback, SUCCESS);
     feedback = read(fdesc, msg, BUF_LEN);
-    check_feedback(feedback, BUF_LEN);
-    
     close(fdesc);
-    write(STDOUT_FILENO, msg, BUF_LEN);
-    printf("\n");
+    if (feedback <= 0) {
+        errno = EINVAL;
+        fprintf(stderr, "message_reader: %s\n", strerror(errno));
+	exit(1);
+    }
     
+    write(STDOUT_FILENO, msg, feedback);
+
+    printf("\n");
     return 0;
 }

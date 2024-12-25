@@ -28,42 +28,48 @@ MODULE_AUTHOR("Snir Fridman");
 struct node {
     struct node *next;
     int chid;
-    char slot_buff[BUF_LEN];
+    size_t len;
+    char *slot_buff;
 };
 
 static struct node *lists[MINOR_COUNT];
 
-void search_node(struct file *fdesc, int s_chid) {
+struct node *search_node(struct file *fdesc, int s_chid) {
     // Searches for the correct node and adjusts fdesc accordingly
     struct inode *finode = fdesc->f_inode;
     int minor = iminor(finode);
     struct node *head = lists[minor];
     if (head) {
         if (head->chid == s_chid) {
-	   return;
+	   return head;
         }
 	while (head->next) {
             head = head->next;
             fdesc->f_pos = fdesc->f_pos + BUF_LEN;
             if (head->chid == s_chid) {
-	        return;
+	        return head;
             }
 	}
 
 	// If we reached here, it means that s_chid could not be found.
         head->next = kmalloc(sizeof(struct node), GFP_USER);
+	if (!(head->next)) {
+            return NULL;
+        }
         *(head->next) = (struct node) {NULL, s_chid};
         fdesc-> f_pos = fdesc->f_pos + BUF_LEN;
+	return head->next;
     }
     else {
         head = kmalloc(sizeof(struct node), GFP_USER);
-	*head = (struct node) {NULL, s_chid};
+	*head = (struct node) {NULL, s_chid, 0};
 	lists[minor] = head;
+	return head;
     }
 }
 
-char *buffer_ptr(struct file *fdesc, loff_t off) {
-    // Returns a pointer to the buffer associated with an offset.
+struct node *buffer_ptr(struct file *fdesc, loff_t off) {
+    // Returns a pointer to the node with the buffer associated with an offset.
     unsigned int ind;
     struct inode *finode = fdesc->f_inode;
     int minor = iminor(finode);
@@ -76,7 +82,7 @@ char *buffer_ptr(struct file *fdesc, loff_t off) {
     }
     if(!head)
         return NULL;
-    return head->slot_buff;
+    return head;
 }
 
 void free_list(struct node *head) {
@@ -94,7 +100,6 @@ struct chardev_info {
 }; 
 
 static struct chardev_info device_info;
-
 static int dev_open_flag = 0; // Marks if the device is open
 
 // -----------------------------------------------------------------------------
@@ -124,11 +129,11 @@ static int device_release(struct inode *inode, struct file *file) {
 
 static ssize_t device_read(struct file *filp, char __user *msg, 
                            size_t length, loff_t *offset) {
-    char *buf_ptr = buffer_ptr(filp, *offset);
+    struct node *nd = buffer_ptr(filp, *offset);
     ssize_t i;
     
-    for (i = 0; i < length && i < BUF_LEN; i++) {
-        put_user(buf_ptr[i], &msg[i]);
+    for (i = 0; i < length && i < nd->len; i++) {
+        put_user(nd->slot_buff[i], &msg[i]);
     }
 
     return i;
@@ -136,17 +141,31 @@ static ssize_t device_read(struct file *filp, char __user *msg,
 
 static ssize_t device_write(struct file *filp, const char __user *msg, 
                             size_t length, loff_t *offset) {
-    char *buf_ptr = buffer_ptr(filp, *offset);
+    char *tmp, *safety;
+    struct node *nd;
     ssize_t i;
-  
+    
     // Check message 0 < length <= BUF_LEN
-    if (length <= 0 || length > 128) {
+    if (length <= 0 || length > BUF_LEN) {
         return -EMSGSIZE;
     }
+    nd = buffer_ptr(filp, *offset);
 
-    for (i = 0; i < length && i < BUF_LEN; i++) {
-        get_user(buf_ptr[i], &msg[i]);
+    safety = kmalloc(length * sizeof(char), GFP_ATOMIC);
+    if (!safety) {
+      return -ENOMEM;
     }
+    
+    // Copy to safety buffer
+    for (i = 0; i < length && i < BUF_LEN; i++) {
+        get_user(safety[i], &msg[i]);
+    }
+    
+    // Writing successful, so we can pass the pointer
+    tmp = nd->slot_buff;
+    nd->slot_buff = safety;
+    nd->len = length;
+    kfree(tmp);
 
     return i;
 }
@@ -163,9 +182,11 @@ static long int device_ioctl(struct file *fp, unsigned int cmd,
         return -EINVAL;
     }
     else {
-        search_node(fp, ctrl);
+        if (search_node(fp, ctrl)) {
+	    return 0;
+	}
     }
-    return 0;
+    return -EINVAL;
 }
 
 // -----------------------------------------------------------------------------
