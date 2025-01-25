@@ -45,6 +45,8 @@ struct node *search_node(struct file *fdesc, int s_chid) {
     struct node *head = lists[minor];
     struct node *for_del;
 
+    fdesc->f_pos = 0;
+
     while (head && head->len == 0) {
 	for_del = head;
 	head = head->next;
@@ -75,7 +77,7 @@ struct node *search_node(struct file *fdesc, int s_chid) {
             return NULL;
         }
         *(head->next) = (struct node) {NULL, s_chid};
-        fdesc-> f_pos = fdesc->f_pos + BUF_LEN;
+        fdesc->f_pos = fdesc->f_pos + BUF_LEN;
 	return head->next;
     }
     else {
@@ -84,23 +86,6 @@ struct node *search_node(struct file *fdesc, int s_chid) {
 	lists[minor] = head;
 	return head;
     }
-}
-
-struct node *buffer_ptr(struct file *fdesc, loff_t off) {
-    // Returns a pointer to the node with the buffer associated with an offset.
-    unsigned int ind;
-    struct inode *finode = fdesc->f_inode;
-    int minor = iminor(finode);
-    struct node *head = lists[minor];
-    
-    for (ind = off / 128; ind > 0; ind--) {
-        if (!head)
-	    return NULL;
-	head = head->next;
-    }
-    if(!head)
-        return NULL;
-    return head;
 }
 
 void free_list(struct node *head) {
@@ -124,12 +109,19 @@ static int dev_open_flag = 0; // Marks if the device is open
 
 static int device_open(struct inode *inode, struct file *file) {
     unsigned long flags;
+    int *chid;
 
     spin_lock_irqsave(&device_info.lock, flags);
     if (dev_open_flag == 1) {
         spin_unlock_irqrestore(&device_info.lock, flags);
         return -EBUSY;
     }
+
+    chid = kmalloc(sizeof(int), GFP_KERNEL);
+    if (!chid) {
+        return -ENOMEM;
+    }
+    file->private_data = chid;
 
     dev_open_flag++;
     spin_unlock_irqrestore(&device_info.lock, flags);
@@ -140,6 +132,8 @@ static int device_release(struct inode *inode, struct file *file) {
     unsigned long flags;
 
     spin_lock_irqsave(&device_info.lock, flags);
+    kfree(file->private_data);
+    
     dev_open_flag--;
     spin_unlock_irqrestore(&device_info.lock, flags);
     return SUCCESS;
@@ -147,8 +141,12 @@ static int device_release(struct inode *inode, struct file *file) {
 
 static ssize_t device_read(struct file *filp, char __user *msg, 
                            size_t length, loff_t *offset) {
-    struct node *nd = buffer_ptr(filp, *offset);
+    struct node *nd = search_node(filp, *(int *)(filp->private_data));
     ssize_t i;
+    
+    if (!filp || !msg || !offset) {
+	return -EFAULT;
+    }
     
     for (i = 0; i < length && i < nd->len; i++) {
         put_user(nd->slot_buff[i], &msg[i]);
@@ -163,11 +161,15 @@ static ssize_t device_write(struct file *filp, const char __user *msg,
     struct node *nd;
     ssize_t i;
     
+    if (!filp || !msg || !offset) {
+	return -EFAULT;
+    }
+    
     // Check message 0 < length <= BUF_LEN
     if (length <= 0 || length > BUF_LEN) {
         return -EMSGSIZE;
     }
-    nd = buffer_ptr(filp, *offset);
+    nd = search_node(filp, *(int *)(filp->private_data));
 
     safety = kmalloc(length * sizeof(char), GFP_ATOMIC);
     if (!safety) {
@@ -190,17 +192,21 @@ static ssize_t device_write(struct file *filp, const char __user *msg,
 
 static long int device_ioctl(struct file *fp, unsigned int cmd, 
                             unsigned long ctrl) {
-    if (cmd != MSG_SLOT_COMMAND) {
+    int *chid;
+    struct node *nd;
+	
+    if (cmd != MSG_SLOT_CHANNEL) {
         return -EINVAL;
     }
     
     // cmd is valid
-    // This is hardcoded to 3 to not conflict with the kernel
     if (ctrl == 0) {
         return -EINVAL;
     }
     else {
-        if (search_node(fp, ctrl)) {
+	chid = (int *)(fp->private_data);
+	*chid = ctrl;
+        if ((nd = search_node(fp, ctrl))) {
 	    return 0;
 	}
     }

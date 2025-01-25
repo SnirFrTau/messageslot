@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
         check_feedback(1, 0);
     }
     
-    feedback = ioctl(fdesc, MSG_SLOT_COMMAND, chid);
+    feedback = ioctl(fdesc, MSG_SLOT_CHANNEL, chid);
     check_feedback(feedback, SUCCESS);
     feedback = write(fdesc, msg, strlen(msg));
     check_feedback(feedback, strlen(msg));
