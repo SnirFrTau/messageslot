@@ -72,7 +72,7 @@ struct node *search_node(struct file *fdesc, int s_chid) {
         }
 
 	// If we reached here, it means that s_chid could not be found.
-        head->next = kmalloc(sizeof(struct node), GFP_USER);
+        head->next = kmalloc(sizeof(struct node), GFP_KERNEL);
 	if (!(head->next)) {
             return NULL;
         }
@@ -81,7 +81,7 @@ struct node *search_node(struct file *fdesc, int s_chid) {
 	return head->next;
     }
     else {
-        head = kmalloc(sizeof(struct node), GFP_USER);
+        head = kmalloc(sizeof(struct node), GFP_KERNEL);
 	*head = (struct node) {NULL, s_chid, 0};
 	lists[minor] = head;
 	return head;
@@ -171,7 +171,7 @@ static ssize_t device_write(struct file *filp, const char __user *msg,
     }
     nd = search_node(filp, *(int *)(filp->private_data));
 
-    safety = kmalloc(length * sizeof(char), GFP_ATOMIC);
+    safety = kmalloc(length * sizeof(char), GFP_KERNEL);
     if (!safety) {
       return -ENOMEM;
     }
